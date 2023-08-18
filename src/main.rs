@@ -28,54 +28,54 @@ pub async fn add_to_cache(filename: &String) -> Result<(), &'static str> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let re = Regex::new(r#"screenshots/[^t]"#).unwrap();
 
-    loop {
-        let cache = get_cache().await;
-        for e in WalkDir::new(format!("{}/.local/share/Steam/userdata/", home_dir().unwrap().display())).into_iter().filter_map(|e| e.ok()) {
-            if re.is_match(e.path().to_str().unwrap()) && e.path().is_file() {
-                let filename: String = e.path().file_name().unwrap().to_str().unwrap().to_string();
-                match cache.contains(&filename) {
-                    false => {
-                        let mut url = env::var("SERVER").unwrap();
-                        url.push('/');
-                        url.push_str(&filename);
-                        let client = Client::builder()
-                            .danger_accept_invalid_certs(true)
-                            .build()?;
+    let cache = get_cache().await;
+    for e in WalkDir::new(format!("{}/.local/share/Steam/userdata/", home_dir().unwrap().display())).into_iter().filter_map(|e| e.ok()) {
+        if re.is_match(e.path().to_str().unwrap()) && e.path().is_file() {
+            let filename: String = e.path().file_name().unwrap().to_str().unwrap().to_string();
+            match cache.contains(&filename) {
+                false => {
+                    let mut url = env::var("SERVER").unwrap();
+                    url.push('/');
+                    url.push_str(&filename);
+                    let client = Client::builder()
+                        .danger_accept_invalid_certs(true)
+                        .build()?;
 
-                        let response = client.get(&url).send().await?;
+                    let response = client.get(&url).send().await?;
 
-                        match response.status() {
-                            reqwest::StatusCode::NOT_FOUND => {
-                                let file = File::open(e.path()).await?;
+                    match response.status() {
+                        reqwest::StatusCode::NOT_FOUND => {
+                            let file = File::open(e.path()).await?;
 
-                                // read file body stream
-                                let stream = FramedRead::new(file, BytesCodec::new());
-                                let file_body = Body::wrap_stream(stream);
+                            // read file body stream
+                            let stream = FramedRead::new(file, BytesCodec::new());
+                            let file_body = Body::wrap_stream(stream);
 
-                                //make form part of file
-                                let some_file = multipart::Part::stream(file_body)
-                                    .file_name(filename.to_owned());
+                            //make form part of file
+                            let some_file = multipart::Part::stream(file_body)
+                                .file_name(filename.to_owned());
 
-                                //create the multipart form
-                                let form = multipart::Form::new()
-                                    .part("file", some_file);
+                            //create the multipart form
+                            let form = multipart::Form::new()
+                                .part("file", some_file);
 
-                                let url = env::var("SERVER").unwrap().to_string();
-                                //send request
-                                let response = client.put(url.to_owned()).multipart(form).send().await?;
-                                match response.status() {
-                                    reqwest::StatusCode::OK => add_to_cache(&filename).await?,
-                                    res => println!("Error uploading file {}. {} {}", &filename, &url, res)
-                                }
-                            },
-                            _ => {
-                                add_to_cache(&filename).await?;
+                            let url = env::var("SERVER").unwrap().to_string();
+                            //send request
+                            let response = client.put(url.to_owned()).multipart(form).send().await?;
+                            println!("Uploading file {}", &filename);
+                            match response.status() {
+                                reqwest::StatusCode::OK => add_to_cache(&filename).await?,
+                                res => println!("Error uploading file {}. {} {}", &filename, &url, res)
                             }
+                        },
+                        _ => {
+                            add_to_cache(&filename).await?;
                         }
-                    },
-                    true => {}
-                }
+                    }
+                },
+                true => {}
             }
         }
     }
+    Ok(())
 }
