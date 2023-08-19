@@ -68,9 +68,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 res => println!("Error uploading file {}. {} {}", &filename, &url, res)
                             }
                         },
-                        _ => {
-                            add_to_cache(&filename).await?;
-                        }
+                        reqwest::StatusCode::OK => add_to_cache(&filename).await?,
+                        _ => {}
                     }
                 },
                 true => {}
