@@ -2,10 +2,11 @@ use walkdir::WalkDir;
 use regex::Regex;
 use home::home_dir;
 use std::env;
-use tokio::fs::{File};
+use tokio::fs::File;
 use std::fs::{OpenOptions,read_to_string,write};
 use reqwest::{Body, Client, multipart};
 use tokio_util::codec::{BytesCodec, FramedRead};
+use dotenv::dotenv;
 
 pub async fn get_cache() -> Vec<String> {
     let _ = OpenOptions::new().write(true).create_new(true).open(format!("{}/.config/steam-sync.txt", home_dir().unwrap().display()));
@@ -26,6 +27,9 @@ pub async fn add_to_cache(filename: &String) -> Result<(), &'static str> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv().ok();
+    let key = std::env::var("KEY").expect("didn't provide key");
+
     let re = Regex::new(r#"screenshots/[^t]"#).unwrap();
 
     let cache = get_cache().await;
@@ -41,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .danger_accept_invalid_certs(true)
                         .build()?;
 
-                    let response = client.get(&url).send().await?;
+                    let response = client.get(&url).header("Auth-token", &key).send().await?;
 
                     match response.status() {
                         reqwest::StatusCode::NOT_FOUND => {
@@ -61,7 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                             let url = env::var("SERVER").unwrap().to_string();
                             //send request
-                            let response = client.put(url.to_owned()).multipart(form).send().await?;
+                            let response = client.put(url.to_owned()).multipart(form).header("Auth-token", &key).send().await?;
                             println!("Uploading file {}", &filename);
                             match response.status() {
                                 reqwest::StatusCode::OK => add_to_cache(&filename).await?,
